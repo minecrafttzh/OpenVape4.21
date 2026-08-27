@@ -1,0 +1,31 @@
+﻿
+> Task :compileJava FAILED
+.\gradlew.bat : F:\openvape\newscore\src\main\java\gg\vape\module\combat\SilentAura.java:842: ����: �Ҳ�������
+At line:15 char:3789
++ ... cation "f:/openvape/newscore"; .\gradlew.bat compileJava 2>&1 | Out-F ...
++                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (F:\openvape\new...����: �Ҳ�������:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+        this.rotationController.applyAiRotationDelta(aiYawDelta, aiPitchDelta);
+                               ^
+  ����:   ���� applyAiRotationDelta(float,float)
+  λ��: ����ΪAdaptiveRotationController�ı��� rotationController
+ע: F:\openvape\newscore\src\main\java\gg\vape\module\combat\SilentAura.javaʹ�û򸲸����ѹ�ʱ�� API��
+ע: �й���ϸ��Ϣ, ��ʹ�� -Xlint:deprecation ���±��롣
+ע: ĳЩ�����ļ�ʹ����δ�����򲻰�ȫ�Ĳ�����
+ע: �й���ϸ��Ϣ, ��ʹ�� -Xlint:unchecked ���±��롣
+1 ������
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':compileJava'.
+> Compilation failed; see the compiler error output for details.
+
+* Try:
+> Run with --info option to get more log output.
+> Run with --scan to get full insights.
+
+BUILD FAILED in 2s
+1 actionable task: 1 executed

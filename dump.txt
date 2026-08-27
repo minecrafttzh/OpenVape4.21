@@ -1,0 +1,45 @@
+﻿> Task :compileToolsJava
+> Task :processToolsResources NO-SOURCE
+> Task :toolsClasses
+
+> Task :runParamDumper
+Loading model from f:\openvape\newscore\src\main\resources\liquidbounce\models\21kc11kp.params (size=50775)
+.\gradlew.bat : SLF4J(W): No SLF4J providers were found.
+At line:15 char:3887
++ ...  $env:Path; .\gradlew.bat runParamDumper "-PdumpArgs=f:/openvape/news ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (SLF4J(W): No SLF4J providers were found.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+SLF4J(W): Defaulting to no-operation (NOP) logger implementation
+SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
+SLF4J(W): Class path contains SLF4J bindings targeting slf4j-api versions 1.7.x or earlier.
+SLF4J(W): Ignoring binding found at [jar:file:/C:/Users/t/.gradle/caches/modules-2/files-2.1/org.slf4j/slf4j-simple/1.7
+.36/a41f9cfe6faafb2eb83a1c7dd2d0dfd844e2a936/slf4j-simple-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J(W): See https://www.slf4j.org/codes.html#ignoredBindings for an explanation.
+Model loaded successfully.
+Parameter count: 20
+  weight shape=(128, 6)
+  bias shape=(128)
+  gamma shape=(128)
+  beta shape=(128)
+  runningMean shape=(128)
+  runningVar shape=(128)
+  weight shape=(64, 128)
+  bias shape=(64)
+  gamma shape=(64)
+  beta shape=(64)
+  runningMean shape=(64)
+  runningVar shape=(64)
+  weight shape=(32, 64)
+  bias shape=(32)
+  gamma shape=(32)
+  beta shape=(32)
+  runningMean shape=(32)
+  runningVar shape=(32)
+  weight shape=(2, 32)
+  bias shape=(2)
+Wrote f:\openvape\newscore\src\main\resources\liquidbounce\models\21kc11kp.bin (size=49254)
+
+BUILD SUCCESSFUL in 6s
+2 actionable tasks: 2 executed

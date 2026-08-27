@@ -1,0 +1,68 @@
+﻿> Task :compileToolsJava
+> Task :processToolsResources
+> Task :toolsClasses
+
+> Task :runParamsAnalyzer FAILED
+=== Analyzing: f:\openvape\newscore\src\main\resources\liquidbounce\models\19kc8kp.params (size=50775) ===
+
+.\gradlew.bat : SLF4J(W): No SLF4J providers were found.
+At line:15 char:3789
++ ... /newscore"; .\gradlew.bat runParamsAnalyzer -PanalyzeArgs="f:/openvap ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (SLF4J(W): No SLF4J providers were found.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+SLF4J(W): Defaulting to no-operation (NOP) logger implementation
+SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
+SLF4J(W): Class path contains SLF4J bindings targeting slf4j-api versions 1.7.x or earlier.
+SLF4J(W): Ignoring binding found at [jar:file:/C:/Users/t/.gradle/caches/modules-2/files-2.1/org.slf4j/slf4j-simple/1.7
+.36/a41f9cfe6faafb2eb83a1c7dd2d0dfd844e2a936/slf4j-simple-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J(W): See https://www.slf4j.org/codes.html#ignoredBindings for an explanation.
+DJL loaded 20 parameters:
+  name='weight' shape=(128, 6) dtype=float32 size=768
+  name='bias' shape=(128) dtype=float32 size=128
+  name='gamma' shape=(128) dtype=float32 size=128
+  name='beta' shape=(128) dtype=float32 size=128
+  name='runningMean' shape=(128) dtype=float32 size=128
+  name='runningVar' shape=(128) dtype=float32 size=128
+  name='weight' shape=(64, 128) dtype=float32 size=8192
+  name='bias' shape=(64) dtype=float32 size=64
+  name='gamma' shape=(64) dtype=float32 size=64
+  name='beta' shape=(64) dtype=float32 size=64
+  name='runningMean' shape=(64) dtype=float32 size=64
+  name='runningVar' shape=(64) dtype=float32 size=64
+  name='weight' shape=(32, 64) dtype=float32 size=2048
+  name='bias' shape=(32) dtype=float32 size=32
+  name='gamma' shape=(32) dtype=float32 size=32
+  name='beta' shape=(32) dtype=float32 size=32
+  name='runningMean' shape=(32) dtype=float32 size=32
+  name='runningVar' shape=(32) dtype=float32 size=32
+  name='weight' shape=(2, 32) dtype=float32 size=64
+  name='bias' shape=(2) dtype=float32 size=2
+
+=== Raw byte analysis ===
+magic=DJL@ @0
+version=1 @4
+encoding='tf' @8
+mimeType='FLOAT32' @-1
+
+--- Remaining bytes (first 200 as hex) ---
+Start of NDArray data @ -1
+Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index -1 out of bounds for length 50775
+	at gg.vape.tools.ParamsAnalyzer.analyzeRawBytes(ParamsAnalyzer.java:95)
+	at gg.vape.tools.ParamsAnalyzer.main(ParamsAnalyzer.java:47)
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':runParamsAnalyzer'.
+> Process 'command 'C:\Program Files\Java\jdk-21.0.11\bin\java.exe'' finished with non-zero exit value 1
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 5s
+3 actionable tasks: 3 executed

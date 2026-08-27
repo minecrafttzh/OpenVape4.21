@@ -1,0 +1,30 @@
+﻿> Task :compileJava UP-TO-DATE
+> Task :processResources
+> Task :classes
+> Task :injectionJar
+
+> Task :verifyInjectionPayload
+injection payload: classes=7595, Java 9+ classes=0, runtime package families=7
+
+> Task :configureNative
+-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.22621.
+-- Configuring done (0.1s)
+-- Generating done (0.1s)
+-- Build files have been written to: F:/openvape/newscore/build/native
+
+> Task :buildNative
+������ .NET Framework MSBuild �汾 18.3.0-release-26070-10+3972042b7
+
+  Vape421BootstrapTest.vcxproj -> F:\openvape\newscore\build\native\Release\Vape421BootstrapTest.exe
+  Vape421Injector.vcxproj -> F:\openvape\newscore\build\native\dist\Vape421Injector.exe
+    ���ڴ����� F:/openvape/newscore/build/native/Release/Vape421Native.lib �Ͷ��� F:/openvape/newscore/build/native/Release/Vape421Native.exp
+  Vape421Native.vcxproj -> F:\openvape\newscore\build\native\dist\Vape421Native.dll
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.8/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 9s
+6 actionable tasks: 5 executed, 1 up-to-date

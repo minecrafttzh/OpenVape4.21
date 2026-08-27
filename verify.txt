@@ -1,0 +1,45 @@
+﻿> Task :compileJava UP-TO-DATE
+> Task :processResources UP-TO-DATE
+> Task :classes UP-TO-DATE
+> Task :compileToolsJava
+> Task :processToolsResources
+> Task :toolsClasses
+
+> Task :runVerifyMlp
+.\gradlew.bat : SLF4J(W): No SLF4J providers were found.
+At line:15 char:3887
++ ...  $env:Path; .\gradlew.bat runVerifyMlp "-PverifyArgs=f:/openvape/news ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (SLF4J(W): No SLF4J providers were found.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+SLF4J(W): Defaulting to no-operation (NOP) logger implementation
+SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
+SLF4J(W): Class path contains SLF4J bindings targeting slf4j-api versions 1.7.x or earlier.
+SLF4J(W): Ignoring binding found at [jar:file:/C:/Users/t/.gradle/caches/modules-2/files-2.1/org.slf4j/slf4j-simple/1.7
+.36/a41f9cfe6faafb2eb83a1c7dd2d0dfd844e2a936/slf4j-simple-1.7.36.jar!/org/slf4j/impl/StaticLoggerBinder.class]
+SLF4J(W): See https://www.slf4j.org/codes.html#ignoredBindings for an explanation.
+Input 0: [0.0, 0.0, 0.0, 0.0, 0.0, 3.0]
+  DJL  : [0.10296035, 0.0063466243]
+  Java : [0.10295999, 0.0063465983]
+  -> OK (maxDiff=0.000000)
+Input 1: [15.5, -3.2, 1.1, -0.4, 0.22, 2.5]
+  DJL  : [2.7364106, -0.5026128]
+  Java : [2.7364104, -0.5026132]
+  -> OK (maxDiff=0.000000)
+Input 2: [-90.0, 25.0, -3.0, 1.5, 0.45, 4.0]
+  DJL  : [-9.012781, 1.3438656]
+  Java : [-9.012782, 1.3438662]
+  -> OK (maxDiff=0.000001)
+Input 3: [45.0, 0.0, 5.0, 0.0, 0.0, 1.5]
+  DJL  : [13.668923, -0.8579077]
+  Java : [13.668921, -0.8579069]
+  -> OK (maxDiff=0.000002)
+Input 4: [180.0, -45.0, -8.0, 2.0, 0.6, 5.5]
+  DJL  : [-0.29787895, 1.7799714]
+  Java : [-0.2978828, 1.779971]
+  -> OK (maxDiff=0.000004)
+ALL TESTS PASSED - pure-Java MlpModel matches DJL within 1e-4.
+
+BUILD SUCCESSFUL in 3s
+5 actionable tasks: 3 executed, 2 up-to-date

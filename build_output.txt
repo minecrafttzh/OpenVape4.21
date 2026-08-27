@@ -1,0 +1,13 @@
+﻿> Task :compileJava UP-TO-DATE
+> Task :processResources UP-TO-DATE
+> Task :classes UP-TO-DATE
+> Task :injectionJar UP-TO-DATE
+
+> Task :verifyInjectionPayload
+injection payload: classes=7595, Java 9+ classes=0, runtime package families=7
+
+> Task :configureNative UP-TO-DATE
+> Task :buildNative UP-TO-DATE
+
+BUILD SUCCESSFUL in 979ms
+6 actionable tasks: 1 executed, 5 up-to-date

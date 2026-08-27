@@ -1,0 +1,15 @@
+﻿
+> Task :compileJava
+.\gradlew.bat : ע: ĳЩ�����ļ�ʹ�û򸲸����ѹ�ʱ�� API��
+At line:15 char:3887
++ ... CMake\CMake\bin;" + $env:Path; .\gradlew.bat compileJava 2>&1 | Out-F ...
++                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (ע: ĳЩ�����ļ�ʹ�û򸲸����ѹ�ʱ�� API��:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+ע: �й���ϸ��Ϣ, ��ʹ�� -Xlint:deprecation ���±��롣
+ע: ĳЩ�����ļ�ʹ����δ�����򲻰�ȫ�Ĳ�����
+ע: �й���ϸ��Ϣ, ��ʹ�� -Xlint:unchecked ���±��롣
+
+BUILD SUCCESSFUL in 21s
+1 actionable task: 1 executed

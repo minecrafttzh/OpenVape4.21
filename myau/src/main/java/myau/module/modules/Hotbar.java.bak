@@ -1,0 +1,234 @@
+package myau.module.modules;
+
+import myau.Myau;
+import myau.event.EventTarget;
+import myau.events.Render2DEvent;
+import myau.font.CFontRenderer;
+import myau.module.Module;
+import myau.property.properties.BooleanProperty;
+import myau.property.properties.ColorProperty;
+import myau.property.properties.FloatProperty;
+import myau.property.properties.IntProperty;
+import myau.property.properties.ModeProperty;
+import myau.util.AnimationUtil;
+import myau.util.RenderUtil;
+import myau.util.shader.BlurUtils;
+import myau.util.shader.RoundedUtils;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.ScaledResolution;
+import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.RenderHelper;
+import net.minecraft.item.ItemStack;
+
+import java.awt.Color;
+
+public class Hotbar extends Module {
+    protected static final Minecraft mc = Minecraft.getMinecraft();
+
+    public final BooleanProperty xpBar = new BooleanProperty("XP Bar", true);
+    public final ModeProperty xpMode = new ModeProperty("XP Mode", 0, new String[]{"Gradient", "HUD Theme", "Custom", "Rainbow"});
+    public final BooleanProperty xpGlassEffect = new BooleanProperty("XP Glass", true);
+    public final BooleanProperty xpShowLevel = new BooleanProperty("XP Level", true);
+    public final ModeProperty xpTextFormat = new ModeProperty("XP Text Format", 0, new String[]{"Level Only", "Lvl X", "Level X", "Level + %", "Percentage"});
+    public final ColorProperty xpColor1 = new ColorProperty("XP Color 1", 0x00F2FE);
+    public final ColorProperty xpColor2 = new ColorProperty("XP Color 2", 0x4FACFE);
+    public final FloatProperty xpHeight = new FloatProperty("XP Height", 3.0F, 1.0F, 10.0F);
+    public final FloatProperty xpRadius = new FloatProperty("XP Radius", 1.5F, 0.5F, 5.0F);
+    public final IntProperty xpYOffset = new IntProperty("XP Y-Offset", 0, -50, 50);
+    public final IntProperty healthYOffset = new IntProperty("Health Y-Offset", 10, -100, 100);
+
+    private AnimationUtil animationUtil;
+    private int lastSlot = -1;
+
+    private float animatedXPProgress = 0.0f;
+    private long lastXPRenderTime = System.currentTimeMillis();
+
+    public Hotbar() {
+        super("Hotbar", true, false, "Custom Hotbar rendering with custom XP bar");
+    }
+
+    @Override
+    public void onEnabled() {
+        animationUtil = new AnimationUtil(AnimationUtil.Easing.EASE_OUT_QUINT, 300);
+        lastSlot = -1;
+        animatedXPProgress = 0.0f;
+        lastXPRenderTime = System.currentTimeMillis();
+        super.onEnabled();
+    }
+
+    @EventTarget
+    public void onRender2D(Render2DEvent event) {
+        if (!this.isEnabled() || mc.gameSettings.showDebugInfo || mc.thePlayer == null || mc.playerController.isSpectator()) return;
+
+        ScaledResolution sr = new ScaledResolution(mc);
+        int middleX = sr.getScaledWidth() / 2;
+        int bottomY = sr.getScaledHeight();
+
+        float width = 182;
+        float height = 22;
+        float startX = middleX - width / 2.0f;
+        float startY = bottomY - height - 2;
+
+        // 1. Render Custom XP Bar if enabled
+        if (xpBar.getValue()) {
+            renderXPBar(startX, startY);
+        }
+
+        // 2. Draw Glassmorphic Background for Hotbar
+        if (RenderFixes.shouldUseShaders()) {
+            BlurUtils.prepareBlur();
+            RoundedUtils.drawRound(startX, startY, width, height, 8.0F, Color.WHITE);
+            BlurUtils.blurEnd(2, 4.0F);
+        }
+
+        Color backgroundColor = new Color(15, 15, 15, 100);
+        RoundedUtils.drawRound(startX, startY, width, height, 8.0F, backgroundColor);
+
+        // Selection Box Animation
+        int currentItem = mc.thePlayer.inventory.currentItem;
+        float targetX = startX + currentItem * 20 + 1;
+
+        if (animationUtil == null || lastSlot == -1) {
+            animationUtil = new AnimationUtil(AnimationUtil.Easing.EASE_OUT_QUINT, 250);
+            animationUtil.run(targetX);
+            lastSlot = currentItem;
+        }
+
+        if (lastSlot != currentItem) {
+            animationUtil.run(targetX);
+            lastSlot = currentItem;
+        }
+
+        float highlightX = (float) animationUtil.getValue();
+
+        // Draw Selection Highlight
+        Color highlightColor = new Color(255, 255, 255, 60);
+        RoundedUtils.drawRound(highlightX, startY + 1, 20, 20, 6.0F, highlightColor);
+
+        // Draw Items
+        RenderHelper.enableGUIStandardItemLighting();
+        GlStateManager.enableRescaleNormal();
+        GlStateManager.enableBlend();
+        GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
+        for (int i = 0; i < 9; ++i) {
+            float itemX = startX + i * 20 + 3;
+            float itemY = startY + 3;
+
+            ItemStack stack = mc.thePlayer.inventory.mainInventory[i];
+            if (stack != null) {
+                RenderUtil.renderItemAndEffectIntoGui3D(stack, (int) itemX, (int) itemY);
+                mc.getRenderItem().renderItemOverlays(mc.fontRendererObj, stack, (int)itemX, (int)itemY);
+            }
+        }
+        RenderHelper.disableStandardItemLighting();
+        GlStateManager.disableRescaleNormal();
+        GlStateManager.disableBlend();
+    }
+
+    private void renderXPBar(float hotbarStartX, float hotbarStartY) {
+        long currentTime = System.currentTimeMillis();
+        float deltaTime = Math.min(0.1f, Math.max(0.001f, (currentTime - lastXPRenderTime) / 1000.0f));
+        lastXPRenderTime = currentTime;
+
+        float targetProgress = Math.max(0.0f, Math.min(1.0f, mc.thePlayer.experience));
+        animatedXPProgress = AnimationUtil.animateSmooth(targetProgress, animatedXPProgress, 10.0f, deltaTime);
+
+        float width = 182.0f;
+        float height = xpHeight.getValue();
+        float startX = hotbarStartX;
+        float startY = hotbarStartY - height - 3.0f + xpYOffset.getValue();
+        float radius = xpRadius.getValue();
+
+        // 1. Draw Glassmorphic Background Blur
+        if (xpGlassEffect.getValue() && RenderFixes.shouldUseShaders()) {
+            BlurUtils.prepareBlur();
+            RoundedUtils.drawRound(startX, startY, width, height, radius, Color.WHITE);
+            BlurUtils.blurEnd(2, 4.0F);
+        }
+
+        // 2. Draw Translucent Glass Background Frame (With glassmorphic outline)
+        Color backgroundColor = new Color(25, 25, 25, 70);
+        Color outlineColor = new Color(255, 255, 255, 40);
+        RoundedUtils.drawRoundOutline(startX, startY, width, height, radius, 0.5f, backgroundColor, outlineColor);
+
+        // 3. Draw Animated Gradient Progress Bar Fill
+        if (animatedXPProgress > 0.005f) {
+            float fillWidth = Math.max(radius * 2.0f, width * animatedXPProgress);
+            fillWidth = Math.min(width, fillWidth);
+
+            Color c1;
+            Color c2;
+
+            switch (xpMode.getValue()) {
+                case 1: { // HUD Theme
+                    HUD hud = (HUD) Myau.moduleManager.modules.get(HUD.class);
+                    if (hud != null) {
+                        c1 = hud.getColor(currentTime);
+                        c2 = hud.getColor(currentTime + 500);
+                    } else {
+                        c1 = new Color(0x00F2FE);
+                        c2 = new Color(0x4FACFE);
+                    }
+                    break;
+                }
+                case 3: { // Rainbow
+                    float hue1 = ((currentTime % 4000) / 4000.0f);
+                    float hue2 = (((currentTime + 800) % 4000) / 4000.0f);
+                    c1 = Color.getHSBColor(hue1, 0.75f, 0.95f);
+                    c2 = Color.getHSBColor(hue2, 0.75f, 0.95f);
+                    break;
+                }
+                case 0: // Gradient
+                case 2: // Custom
+                default: {
+                    c1 = new Color(xpColor1.getValue());
+                    c2 = new Color(xpColor2.getValue());
+                    break;
+                }
+            }
+
+            RoundedUtils.drawGradientHorizontal(startX, startY, fillWidth, height, radius, c1, c2);
+        }
+
+        // 4. Draw XP Level Text Display (Using configured HUD font renderer)
+        if (xpShowLevel.getValue()) {
+            int level = mc.thePlayer.experienceLevel;
+            int percent = (int) (mc.thePlayer.experience * 100.0f);
+            String levelText;
+
+            switch (xpTextFormat.getValue()) {
+                case 1:
+                    levelText = "Lvl " + level;
+                    break;
+                case 2:
+                    levelText = "Level " + level;
+                    break;
+                case 3:
+                    levelText = "Lvl " + level + " (" + percent + "%)";
+                    break;
+                case 4:
+                    levelText = percent + "%";
+                    break;
+                case 0:
+                default:
+                    levelText = String.valueOf(level);
+                    break;
+            }
+
+            HUD hud = (HUD) Myau.moduleManager.modules.get(HUD.class);
+            int textColor = hud != null ? hud.getColor(System.currentTimeMillis()) : 0xFF80FF20; // Sync with HUD color
+
+            if (hud != null && hud.fontMode.getValue() != 1 && hud.fontRenderer != null) {
+                float textWidth = (float) hud.fontRenderer.getStringWidth(levelText);
+                float textX = startX + (width - textWidth) / 2.0f;
+                float textY = startY - 10.0f;
+                hud.fontRenderer.drawStringWithShadow(levelText, textX, textY, textColor);
+            } else {
+                int textWidth = mc.fontRendererObj.getStringWidth(levelText);
+                int textX = (int) (startX + (width - textWidth) / 2.0f);
+                int textY = (int) (startY - 9.0f);
+                mc.fontRendererObj.drawStringWithShadow(levelText, textX, textY, textColor);
+            }
+        }
+    }
+}

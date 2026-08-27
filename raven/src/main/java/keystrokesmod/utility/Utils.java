@@ -1,0 +1,1648 @@
+package keystrokesmod.utility;
+
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+import com.google.gson.JsonObject;
+import keystrokesmod.helper.MouseHelper;
+import keystrokesmod.mixin.impl.accessor.IAccessorGuiIngame;
+import keystrokesmod.mixin.impl.accessor.IAccessorItemFood;
+import keystrokesmod.mixin.impl.accessor.IAccessorMinecraft;
+import keystrokesmod.mixin.impl.accessor.IAccessorPlayerControllerMP;
+import keystrokesmod.Raven;
+import keystrokesmod.module.Module;
+import keystrokesmod.module.ModuleManager;
+import keystrokesmod.module.impl.client.Settings;
+import keystrokesmod.module.impl.combat.AutoClicker;
+import keystrokesmod.module.impl.minigames.DuelsStats;
+import keystrokesmod.module.impl.player.Freecam;
+import keystrokesmod.module.impl.world.AntiBot;
+import keystrokesmod.module.setting.impl.SliderSetting;
+import keystrokesmod.utility.color.ColorConstants;
+import net.minecraft.block.*;
+import net.minecraft.client.gui.FontRenderer;
+import net.minecraft.client.gui.inventory.GuiInventory;
+import net.minecraft.client.network.NetworkPlayerInfo;
+import net.minecraft.client.renderer.ActiveRenderInfo;
+import net.minecraft.client.settings.KeyBinding;
+import net.minecraft.enchantment.Enchantment;
+import net.minecraft.enchantment.EnchantmentHelper;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.entity.player.InventoryPlayer;
+import net.minecraft.init.Items;
+import net.minecraft.inventory.ContainerPlayer;
+import net.minecraft.item.*;
+import net.minecraft.network.play.client.C03PacketPlayer.C05PacketPlayerLook;
+import net.minecraft.network.play.client.C0APacketAnimation;
+import net.minecraft.potion.Potion;
+import net.minecraft.scoreboard.Score;
+import net.minecraft.scoreboard.ScoreObjective;
+import net.minecraft.scoreboard.ScorePlayerTeam;
+import net.minecraft.scoreboard.Scoreboard;
+import net.minecraft.util.*;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
+
+import java.awt.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.*;
+import java.util.List;
+import java.util.stream.IntStream;
+
+public class Utils implements IMinecraftInstance {
+    private static final Random rand = new Random();
+    private static final ThreadLocal<Integer> LOCAL_PLAYER_SUB_UPDATE_DEPTH = ThreadLocal.withInitial(() -> 0);
+    public static HashSet<String> friends = new HashSet<>();
+    public static HashSet<String> enemies = new HashSet<>();
+    public static final Logger log = LogManager.getLogger();
+
+    public static boolean addEnemy(String name) {
+        if (Raven.playerRelationsManager != null) {
+            // Chat feedback is owned by callers (e.g. .enemy command) — avoid double messages with sendMessage + replyWithHeader
+            return Raven.playerRelationsManager.addEnemy(name);
+        }
+        if (enemies.add(name.toLowerCase())) {
+            sendMessage("&7Added enemy&7: &b" + name);
+            return true;
+        }
+        return false;
+    }
+
+    public static boolean removeEnemy(String name) {
+        if (Raven.playerRelationsManager != null) {
+            return Raven.playerRelationsManager.removeEnemy(name);
+        }
+        if (enemies.remove(name.toLowerCase())) {
+            sendMessage("&7Removed enemy&7: &b" + name);
+            return true;
+        }
+        return false;
+    }
+
+    public static float getCameraYaw() {
+        return (float) Math.toDegrees(Math.atan2(ActiveRenderInfo.getRotationZ(), ActiveRenderInfo.getRotationX()));
+    }
+
+    public static float getCameraPitch() {
+        return (float) Math.toDegrees(Math.acos(ActiveRenderInfo.getRotationXZ()));
+    }
+
+    public static Vec3 getCameraPos(double renderPartialTicks) {
+        if (mc.gameSettings.thirdPersonView == 0) {
+            Vec3 firstPersonPos = new Vec3(mc.thePlayer.posX, mc.thePlayer.posY + mc.thePlayer.getEyeHeight(), mc.thePlayer.posZ);
+            return firstPersonPos;
+        }
+        float cameraDistance = 4.0F;
+        if (ModuleManager.extendCamera != null && ModuleManager.extendCamera.isEnabled()) {
+            cameraDistance = (float) ModuleManager.extendCamera.distance.getInput();
+        }
+
+        Entity renderEntity = mc.getRenderViewEntity();
+        float entityEyeHeight = renderEntity.getEyeHeight();
+
+        double interpolatedX = renderEntity.prevPosX + (renderEntity.posX - renderEntity.prevPosX) * renderPartialTicks;
+        double interpolatedY = renderEntity.prevPosY + (renderEntity.posY - renderEntity.prevPosY) * renderPartialTicks + entityEyeHeight;
+        double interpolatedZ = renderEntity.prevPosZ + (renderEntity.posZ - renderEntity.prevPosZ) * renderPartialTicks;
+
+        double adjustedDistance = cameraDistance;
+
+        float cameraYaw = getCameraYaw();
+        float cameraPitch = getCameraPitch();
+
+        double offsetX = -MathHelper.sin(cameraYaw / 180.0F * (float) Math.PI) * MathHelper.cos(cameraPitch / 180.0F * (float) Math.PI) * adjustedDistance;
+        double offsetZ =  MathHelper.cos(cameraYaw / 180.0F * (float) Math.PI) * MathHelper.cos(cameraPitch / 180.0F * (float) Math.PI) * adjustedDistance;
+        double offsetY = -MathHelper.sin(cameraPitch / 180.0F * (float) Math.PI) * adjustedDistance;
+
+        if (ModuleManager.noCameraClip == null || !ModuleManager.noCameraClip.isEnabled()) {
+            for (int i = 0; i < 8; i++) {
+                float cornerOffsetX = (float) ((i & 1) * 2 - 1) * 0.1F;
+                float cornerOffsetY = (float) ((i >> 1 & 1) * 2 - 1) * 0.1F;
+                float cornerOffsetZ = (float) ((i >> 2 & 1) * 2 - 1) * 0.1F;
+
+                MovingObjectPosition rayTraceResult = mc.theWorld.rayTraceBlocks(new Vec3(interpolatedX + cornerOffsetX, interpolatedY + cornerOffsetY, interpolatedZ + cornerOffsetZ), new Vec3((interpolatedX - offsetX + cornerOffsetX + cornerOffsetZ), (interpolatedY - offsetY + cornerOffsetY), (interpolatedZ - offsetZ + cornerOffsetZ)));
+
+                if (rayTraceResult != null) {
+                    double blockHitDistance = rayTraceResult.hitVec.distanceTo(new Vec3(interpolatedX, interpolatedY, interpolatedZ));
+                    if (blockHitDistance < adjustedDistance) {
+                        adjustedDistance = blockHitDistance;
+                    }
+                }
+            }
+        }
+
+        double finalCameraX = interpolatedX - offsetX * (adjustedDistance / cameraDistance);
+        double finalCameraY = interpolatedY - offsetY * (adjustedDistance / cameraDistance);
+        double finalCameraZ = interpolatedZ - offsetZ * (adjustedDistance / cameraDistance);
+
+        return new Vec3(finalCameraX, finalCameraY, finalCameraZ);
+    }
+
+    public static void printInfo(EntityLivingBase ent) {
+        if (ent == null) {
+            return;
+        }
+        sendMessage("&7&m-------------------------");
+        sendMessage("&eattacking: &r" + ent.getName());
+        sendMessage("&7type: &b" + ent.getClass().getSimpleName());
+        sendMessage("&7bot: &r" + (ModuleManager.antiBot.isEnabled() ? AntiBot.isBot(ent) : "&cantibot disabled"));
+        boolean isPlayer = ent instanceof EntityPlayer;
+        sendMessage("&7player: &r" + isPlayer);
+        sendMessage("&7dist eye: &d" + round(getDistanceToEye(ent), 2));
+        sendMessage("&7min dist: &d" + round(Math.sqrt(raycastDistanceSq(ent, 12.0, false)), 2));
+        IChatComponent displayName = ent.getDisplayName();
+        boolean hasDisplayName = displayName != null;
+        if (isPlayer) {
+            EntityPlayer p = (EntityPlayer)ent;
+            UUID uuid = p.getUniqueID();
+            sendMessage("&7uuid: &d" + uuid.toString() + " &b" + uuid.variant() + " " + uuid.version());
+            NetworkPlayerInfo clientPlayer = mc.getNetHandler().getPlayerInfo(p.getUniqueID());
+            sendMessage("&7ping: &d" + ((clientPlayer == null) ? "&cnot found" : clientPlayer.getResponseTime()));
+            sendMessage("&7teammate: &r" + isTeammate(p));
+            sendMessage("&7tablist: &r" + isInTabList(p));
+            if (p.getTeam() != null) {
+                ScorePlayerTeam scoreTeam = (ScorePlayerTeam)p.getTeam();
+                sendMessage("&7team name: &r" + scoreTeam.getTeamName());
+                sendMessage("&7team prefix: &r" + scoreTeam.getColorPrefix());
+                sendMessage("&7team suffix: &r" + scoreTeam.getColorSuffix());
+            }
+        }
+        sendMessage("&7display unformatted: &r" + (hasDisplayName ? displayName.getUnformattedText() : "&cnull"));
+        sendMessage("&7insertion: &r" + (hasDisplayName ? displayName.getChatStyle().getInsertion() : "&cnull"));
+        sendMessage("&7health: &r" + ent.getHealth());
+        sendMessage("&7ht: &d" + ent.hurtTime + " &7mht: &d" + ent.maxHurtTime);
+        sendMessage("&7ticks existed: &r" + ent.ticksExisted);
+        sendMessage("&7invisible: &r" + ent.isInvisible());
+        sendMessage("&7dead: &r" + ent.isDead);
+    }
+
+    public static double raycastDistanceSq(Entity en, double max_reach, boolean calc_rot) {
+        Vec3 eyeVec = mc.thePlayer.getPositionEyes(1.0f);
+        float yaw;
+        float pitch;
+        if (calc_rot) {
+            float[] rot = RotationUtils.getRotations(en);
+            yaw = rot[0];
+            pitch = rot[1];
+        }
+        else {
+            yaw = mc.thePlayer.rotationYaw;
+            pitch = mc.thePlayer.rotationPitch;
+        }
+        float ff = MathHelper.cos(-yaw * 0.017453292f - 3.1415927f);
+        float ff2 = MathHelper.sin(-yaw * 0.017453292f - 3.1415927f);
+        float ff3 = -MathHelper.cos(-pitch * 0.017453292f);
+        float ff4 = MathHelper.sin(-pitch * 0.017453292f);
+        Vec3 lookVec = new Vec3((double)(ff2 * ff3), (double)ff4, (double)(ff * ff3));
+        double lookVecX = lookVec.xCoord * max_reach;
+        double lookVecY = lookVec.yCoord * max_reach;
+        double lookVecZ = lookVec.zCoord * max_reach;
+        Vec3 sumVec = eyeVec.addVector(lookVecX, lookVecY, lookVecZ);
+        List list = mc.theWorld.getEntitiesWithinAABBExcludingEntity(mc.getRenderViewEntity(), mc.getRenderViewEntity().getEntityBoundingBox().addCoord(lookVecX, lookVecY, lookVecZ).expand(1.0, 1.0, 1.0));
+        for (int i = 0; i < list.size(); ++i) {
+            Entity entity = (Entity)list.get(i);
+            if (entity == en) {
+                if (entity.canBeCollidedWith()) {
+                    float cbs = entity.getCollisionBorderSize();
+                    AxisAlignedBB axis = entity.getEntityBoundingBox().expand((double)cbs, (double)cbs, (double)cbs);
+                    MovingObjectPosition mop = axis.calculateIntercept(eyeVec, sumVec);
+                    if (mop != null) {
+                        return eyeVec.squareDistanceTo(mop.hitVec);
+                    }
+                }
+            }
+        }
+        return -1.0;
+    }
+
+    public static double getDistanceToEye(Entity en) {
+        return mc.thePlayer.getPositionEyes(1.0f).distanceTo(en.getPositionEyes(1.0f));
+    }
+
+    public static boolean isInTabList(EntityPlayer p) {
+        for (NetworkPlayerInfo playerInfo : mc.getNetHandler().getPlayerInfoMap()) {
+            if (playerInfo.getGameProfile().equals(p.getGameProfile())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static String getServerName() {
+        return DuelsStats.nick.isEmpty() ? mc.thePlayer.getName() : DuelsStats.nick;
+    }
+
+    public static boolean tabbedIn() {
+        return mc.currentScreen == null && mc.inGameHasFocus;
+    }
+
+    public static boolean isConsuming(Entity entity) {
+        if (!(entity instanceof EntityPlayer)) {
+            return false;
+        }
+        return ((EntityPlayer) entity).isUsingItem() && holdingFood((EntityPlayer) entity);
+    }
+
+    public static boolean holdingFood(EntityLivingBase entity) {
+        return entity.getHeldItem() != null && entity.getHeldItem().getItem() instanceof ItemFood;
+    }
+
+    public static int getColorFromEntity(Entity entity) {
+        if (entity == null) {
+            return -1;
+        }
+
+        if (entity instanceof EntityPlayer) {
+            ScorePlayerTeam scoreplayerteam = (ScorePlayerTeam) ((EntityLivingBase) entity).getTeam();
+            if (scoreplayerteam != null) {
+                String s = FontRenderer.getFormatFromString(scoreplayerteam.getColorPrefix());
+                if (s.length() >= 2) {
+                    int teamColor = getColorFromFormattingCode(s.charAt(1));
+                    if (teamColor != -1) {
+                        return teamColor;
+                    }
+                }
+            }
+        }
+
+        IChatComponent displayNameComponent = entity.getDisplayName();
+        if (displayNameComponent == null) {
+            return -1;
+        }
+
+        String displayName = removeFormatCodes(displayNameComponent.getFormattedText());
+        if (displayName.length() < 2 || !displayName.startsWith("§") || Character.toLowerCase(displayName.charAt(1)) == 'f') {
+            return -1;
+        }
+
+        return getColorFromFormattingCode(displayName.charAt(1));
+    }
+
+    private static int getColorFromFormattingCode(char formatCode) {
+        switch (Character.toLowerCase(formatCode)) {
+            case '0':
+                return ColorConstants.BLACK;
+            case '1':
+                return ColorConstants.DARK_BLUE;
+            case '2':
+                return ColorConstants.DARK_GREEN;
+            case '3':
+                return ColorConstants.DARK_AQUA;
+            case '4':
+                return ColorConstants.DARK_RED;
+            case '5':
+                return ColorConstants.DARK_PURPLE;
+            case '6':
+                return ColorConstants.GOLD;
+            case '7':
+                return ColorConstants.GRAY;
+            case '8':
+                return ColorConstants.DARK_GRAY;
+            case '9':
+                return ColorConstants.BLUE;
+            case 'a':
+                return ColorConstants.GREEN;
+            case 'b':
+                return ColorConstants.AQUA;
+            case 'c':
+                return ColorConstants.RED;
+            case 'd':
+                return ColorConstants.LIGHT_PURPLE;
+            case 'e':
+                return ColorConstants.YELLOW;
+            case 'f':
+                return 0xFFFFFFFF;
+            default:
+                return -1;
+        }
+    }
+
+    public static boolean overVoid(double posX, double posY, double posZ) {
+        for (int i = (int) posY; i > -1; i--) {
+            if (!(mc.theWorld.getBlockState(new BlockPos(posX, i, posZ)).getBlock() instanceof BlockAir)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static net.minecraft.block.Block getBlockFromName(String name) {
+        return net.minecraft.block.Block.blockRegistry.getObject(new ResourceLocation("minecraft:" + name));
+    }
+
+    public static boolean canPlayerBeSeen(EntityLivingBase player) {
+        double x = player.posX;
+        double y = player.posY;
+        double z = player.posZ;
+        Vec3 vecPlayer = mc.thePlayer.getPositionEyes(1.0f);
+        double shoulderHeight = player.getEyeHeight() - 0.2;
+        if (canSeeVec(vecPlayer, new Vec3(x + 0.3, shoulderHeight, z))) {
+            return true;
+        }
+        if (canSeeVec(vecPlayer, new Vec3(x - 0.3, shoulderHeight, z))) {
+            return true;
+        }
+        if (canSeeVec(vecPlayer, new Vec3(x, shoulderHeight, z + 0.3))) {
+            return true;
+        }
+        if (canSeeVec(vecPlayer, new Vec3(x, shoulderHeight, z - 0.3))) {
+            return true;
+        }
+        for (double d = player.getEyeHeight() + 0.2; d > 0.0; d -= 0.2) {
+            Vec3 vecPoint = new Vec3(x, y + d, z);
+            if (canSeeVec(vecPlayer, vecPoint)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean holdingFireball() {
+        if (mc.thePlayer.getHeldItem() == null) {
+            return false;
+        }
+        return mc.thePlayer.getHeldItem().getItem() instanceof ItemFireball;
+    }
+
+    public static boolean canSeeVec(Vec3 vecPlayer, Vec3 vecTarget) {
+        MovingObjectPosition mop = mc.theWorld.rayTraceBlocks(vecPlayer, vecTarget, false, false, false);
+        return mop == null || mop.typeOfHit != MovingObjectPosition.MovingObjectType.BLOCK;
+    }
+
+    public static List<NetworkPlayerInfo> getTablist(boolean removeSelf) {
+        ArrayList<NetworkPlayerInfo> list = new ArrayList<>(mc.getNetHandler().getPlayerInfoMap());
+        removeDuplicates(list);
+        if (removeSelf) {
+            list.remove(mc.getNetHandler().getPlayerInfo(mc.thePlayer.getUniqueID()));
+        }
+        return list;
+    }
+
+    public static void removeDuplicates(final ArrayList list) {
+        final HashSet set = new HashSet(list);
+        list.clear();
+        list.addAll(set);
+    }
+
+    public static boolean removeFriend(String name) {
+        if (Raven.playerRelationsManager != null) {
+            return Raven.playerRelationsManager.removeFriend(name);
+        }
+        if (friends.remove(name.toLowerCase())) {
+            sendMessage("&7Removed &afriend&7: &b" + name);
+            return true;
+        }
+        return false;
+    }
+
+    public static String getCompilerDirectory() {
+        String tempDirStr = System.getProperty("java.io.tmpdir") + "cmF2ZW5fc2NyaXB0cw";
+        if (System.getProperty("os.name").toLowerCase().contains("linux")) {
+            File tempDir = new File(mc.mcDataDir + File.separator + "keystrokes" + File.separator + "scripts", "compiler_temp");
+            if (!tempDir.exists()) {
+                if (!tempDir.mkdirs()) {
+                    return tempDirStr;
+                }
+            }
+            return tempDir.getAbsolutePath();
+        }
+        return tempDirStr;
+    }
+
+    public static boolean addFriend(String name) {
+        if (Raven.playerRelationsManager != null) {
+            return Raven.playerRelationsManager.addFriend(name);
+        }
+        if (friends.add(name.toLowerCase())) {
+            sendMessage("&7Added &afriend&7: &b" + name);
+            if (enemies.contains(name.toLowerCase())) {
+                enemies.remove(name.toLowerCase());
+            }
+            return true;
+        }
+        return false;
+    }
+
+    public static boolean isWholeNumber(double num) {
+        return num == Math.floor(num);
+    }
+
+    public static String asWholeNum(double input) {
+        return isWholeNumber(input) ? (int) input + "" : String.valueOf(input);
+    }
+
+    public static int randomizeInt(int min, int max) {
+        return rand.nextInt(max - min + 1) + min;
+    }
+
+    public static double randomizeDouble(double min, double max) {
+        return min + (max - min) * rand.nextDouble();
+    }
+
+    public static boolean inFov(float fov, BlockPos blockPos) {
+        return inFov(fov, blockPos.getX(), blockPos.getZ());
+    }
+
+    public static boolean inFov(float fov, Entity entity) {
+        return inFov(fov, entity.posX, entity.posZ);
+    }
+
+    public static boolean inFov(float fov, final double posX, final double posZ) {
+        return inFov(mc.thePlayer, fov, posX, posZ);
+    }
+
+    public static boolean inFov(Entity viewPoint, float fov, final double posX, final double posZ) {
+        fov *= 0.5;
+        final double wrapAngleTo180_double = MathHelper.wrapAngleTo180_double((viewPoint.rotationYaw - RotationUtils.angle(posX, posZ)) % 360.0f);
+        if (wrapAngleTo180_double > 0.0) {
+            if (wrapAngleTo180_double < fov) {
+                return true;
+            }
+        }
+        else if (wrapAngleTo180_double > -fov) {
+            return true;
+        }
+        return false;
+    }
+
+    public static boolean inFov(float origin, float fov, float targetYaw) {
+        fov *= 0.5F;
+        final double wrapAngleTo180_double = MathHelper.wrapAngleTo180_double((origin - targetYaw) % 360.0f);
+        if (wrapAngleTo180_double > 0.0) {
+            return wrapAngleTo180_double < fov;
+        }
+        else return wrapAngleTo180_double > -fov;
+    }
+
+    public static Vec3 getLookVec(float yaw, float pitch) {
+        float f = MathHelper.cos(-yaw * ((float)Math.PI / 180F) - (float)Math.PI);
+        float f1 = MathHelper.sin(-yaw * ((float)Math.PI / 180F) - (float)Math.PI);
+        float f2 = -MathHelper.cos(-pitch * ((float)Math.PI / 180F));
+        float f3 = MathHelper.sin(-pitch * ((float)Math.PI / 180F));
+        return new Vec3(f1 * f2, f3, f * f2);
+    }
+
+    public static boolean holdingBow() {
+        if (mc.thePlayer.getHeldItem() == null) {
+            return false;
+        }
+        return mc.thePlayer.getHeldItem().getItem() instanceof ItemBow;
+    }
+
+    public static boolean bowBackwards() {
+        if (holdingBow() && mc.thePlayer.moveStrafing == 0 && mc.thePlayer.moveForward <= 0 && isMoving()) {
+            return true;
+        }
+        return false;
+    }
+
+    public static boolean noSlowingBackWithBow() {
+        if (ModuleManager.noSlow.noSlowing && bowBackwards()) {
+            return true;
+        }
+        return false;
+    }
+
+    public static void sendMessage(String txt) {
+        if (nullCheck()) {
+            String m = formatColor("&7[&dR&7]&r " + txt);
+            mc.thePlayer.addChatMessage(new ChatComponentText(m));
+        }
+    }
+
+    public static void sendMessageStr(String txt) {
+        if (nullCheck()) {
+            String m = formatColor("&7[&dR&7]&r " + txt);
+            mc.thePlayer.addChatMessage(new ChatComponentText(m));
+        }
+    }
+
+    public static void sendMessage(Object object) {
+        String toString = String.valueOf(object);
+        sendMessage(toString);
+    }
+
+    public static void sendDebugMessage(String message) {
+        if (nullCheck()) {
+            mc.thePlayer.addChatMessage(new ChatComponentText("§7[§dR§7]§r " + message));
+        }
+    }
+
+    public static void attackEntity(Entity e, boolean clientSwing, boolean silentSwing) {
+        if (clientSwing) {
+            mc.thePlayer.swingItem();
+        }
+        else if (silentSwing || (!silentSwing && !clientSwing)) {
+            mc.thePlayer.sendQueue.addToSendQueue(new C0APacketAnimation());
+        }
+        mc.playerController.attackEntity(mc.thePlayer, e);
+    }
+
+    public static void sendRawMessage(String txt) {
+        if (nullCheck()) {
+            mc.thePlayer.addChatMessage(new ChatComponentText(formatColor(txt)));
+        }
+    }
+
+    public static float getTotalHealth(EntityLivingBase entity) {
+        return entity.getHealth() + entity.getAbsorptionAmount();
+    }
+
+    public static String getHealthStr(EntityLivingBase entity, boolean accountDead) {
+        float totalHealth = getTotalHealth(entity);
+        if (accountDead && entity.isDead) {
+            totalHealth = 0;
+        }
+        return getColorForHealth(entity.getHealth() / entity.getMaxHealth(), totalHealth);
+    }
+
+    public static boolean isBindDown(KeyBinding keyBinding) {
+        int keyCode = keyBinding.getKeyCode();
+        if (keyCode < 0) {
+            return Mouse.isButtonDown(keyCode + 100);
+        }
+        return Keyboard.isKeyDown(keyCode);
+    }
+
+    public static int getTool(Block block) {
+        double bestScore = 1.0D;
+        int bestSlot = -1;
+        for (int i = 0; i < InventoryPlayer.getHotbarSize(); ++i) {
+            final ItemStack getStackInSlot = mc.thePlayer.inventory.getStackInSlot(i);
+            if (getStackInSlot != null) {
+                double score = ItemSortScoring.getBlockBreakingScore(getStackInSlot, block);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestSlot = i;
+                }
+            }
+        }
+        return bestSlot;
+    }
+
+    public static boolean onLadder(Entity entity) {
+        int posX = MathHelper.floor_double(entity.posX);
+        int posY = MathHelper.floor_double(entity.posY - 0.20000000298023224D);
+        int posZ = MathHelper.floor_double(entity.posZ);
+        BlockPos blockpos = new BlockPos(posX, posY, posZ);
+        Block block1 = mc.theWorld.getBlockState(blockpos).getBlock();
+        return block1 instanceof BlockLadder && !entity.onGround;
+    }
+
+    public static float getEfficiency(final ItemStack itemStack, final Block block) {
+        float getStrVsBlock = itemStack.getStrVsBlock(block);
+        if (getStrVsBlock > 1.0f) {
+            final int getEnchantmentLevel = EnchantmentHelper.getEnchantmentLevel(Enchantment.efficiency.effectId, itemStack);
+            if (getEnchantmentLevel > 0) {
+                getStrVsBlock += getEnchantmentLevel * getEnchantmentLevel + 1;
+            }
+        }
+        return getStrVsBlock;
+    }
+
+    public static boolean isEnemy(EntityPlayer entityPlayer) {
+        return entityPlayer != null && isEnemy(entityPlayer.getName());
+    }
+
+    public static boolean isEnemy(String name) {
+        if (ModuleManager.relationships != null && !ModuleManager.relationships.isEnabled()) {
+            return false;
+        }
+        if (Raven.playerRelationsManager != null) {
+            return Raven.playerRelationsManager.isEnemy(name);
+        }
+        return name != null && !enemies.isEmpty() && enemies.contains(name.toLowerCase());
+    }
+
+    public static String getColorForHealth(double percent, double totalHealth) {
+        if (Settings.showHealthAsHearts.isToggled()) {
+            totalHealth /= 2.0;
+        }
+        double health = round(totalHealth, 1);
+        String healthStr = ((percent < 0.3) ? "§c" : ((percent < 0.5) ? "§6" : ((percent < 0.7) ? "§e" : "§a"))) + asWholeNum(health);
+        if (Settings.showHeartSymbol.isToggled()) {
+            healthStr += "§c\u2764§r";
+        }
+        return healthStr;
+    }
+
+    public static int getColorForHealth(double health) {
+        return ((health < 0.3) ? -43691 : ((health < 0.5) ? -22016 : ((health < 0.7) ? -171 : -11141291)));
+    }
+
+    public static String formatColor(String txt) {
+        return txt.replaceAll("&", "§");
+    }
+
+    public static String getFirstColorCode(String input) {
+        if (input == null || input.length() < 2) {
+            return "";
+        }
+        for (int i = 0; i < input.length() - 1; i++) {
+            if (input.charAt(i) == '§') {
+                char c = input.charAt(i + 1);
+                if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+                    return "§" + c;
+                }
+            }
+        }
+        return "";
+    }
+
+    public static int getBoldWidth(String string) {
+        boolean bold = false;
+        int additionalWidth = 0;
+        for (int i = 0; i < string.length(); ++i) {
+            char c0 = string.charAt(i);
+            if (c0 == '§' && i + 1 < string.length()) {
+                int i2 = "0123456789abcdefklmnor".indexOf(string.toLowerCase(Locale.ENGLISH).charAt(i + 1));
+                if (i2 == 17) {
+                    bold = true;
+                }
+                ++i;
+            }
+            else {
+                if (bold) {
+                    ++additionalWidth;
+                }
+            }
+        }
+        return additionalWidth;
+    }
+
+    public static void correctValue(SliderSetting c, SliderSetting d) {
+        if (c.getInput() > d.getInput()) {
+            double p = c.getInput();
+            c.setValueWithEvent(d.getInput());
+            d.setValueWithEvent(p);
+        }
+    }
+
+    public static String generateRandomString(final int n) {
+        final char[] array = "abcdefghijklmnopqrstuvwxyz0123456789".toCharArray();
+        final StringBuilder sb = new StringBuilder();
+        IntStream.range(0, n).forEach(p2 -> sb.append(array[rand.nextInt(array.length)]));
+        return sb.toString();
+    }
+
+    public static boolean isFriended(EntityPlayer entityPlayer) {
+        return entityPlayer != null && isFriended(entityPlayer.getName());
+    }
+
+    public static boolean isFriended(String name) {
+        if (ModuleManager.relationships != null && !ModuleManager.relationships.isEnabled()) {
+            return false;
+        }
+        if (Raven.playerRelationsManager != null) {
+            return Raven.playerRelationsManager.isFriend(name);
+        }
+        return name != null && !friends.isEmpty() && friends.contains(name.toLowerCase());
+    }
+
+    public static double getRandomValue(SliderSetting a, SliderSetting b, Random r) {
+        return a.getInput() == b.getInput() ? a.getInput() : a.getInput() + r.nextDouble() * (b.getInput() - a.getInput());
+    }
+
+    public static boolean nullCheck() {
+        return mc.thePlayer != null && mc.theWorld != null;
+    }
+
+    public static boolean isHypixel() {
+        return !mc.isSingleplayer() && mc.getCurrentServerData() != null && mc.getCurrentServerData().serverIP.contains("hypixel.net");
+    }
+
+    public static String getHitsToKillStr(final EntityPlayer entityPlayer, final ItemStack itemStack) {
+        final int n = (int)Math.ceil(getHitsToKill(entityPlayer, itemStack));
+        return "§" + ((n <= 1) ? "c" : ((n <= 3) ? "6" : ((n <= 5) ? "e" : "a"))) + n;
+    }
+
+    public static double getHitsToKill(final EntityPlayer target, final ItemStack usedItem) {
+        double heldItemDamageLevel = 1.0;
+        if (usedItem != null && (usedItem.getItem() instanceof ItemSword || usedItem.getItem() instanceof ItemAxe)) {
+            heldItemDamageLevel += getDamageLevel(usedItem);
+        }
+        double armorProtPercentage = 0.0;
+        double totalEPF = 0.0;
+        for (int i = 0; i < 4; ++i) {
+            final ItemStack stack = target.inventory.armorItemInSlot(i);
+            if (stack != null) {
+                if (stack.getItem() instanceof ItemArmor) {
+                    armorProtPercentage += ((ItemArmor)stack.getItem()).damageReduceAmount * 0.04;
+                    final int protLevel = EnchantmentHelper.getEnchantmentLevel(Enchantment.protection.effectId, stack);
+                    if (protLevel != 0) {
+                        final double epf = Math.floor(0.75 * (6 + protLevel * protLevel) / 3.0);
+                        totalEPF += epf;
+                    }
+                }
+            }
+        }
+        totalEPF = 0.04 * Math.min(Math.ceil(Math.min(totalEPF, 25.0) * 0.75), 20.0);
+        final double armorReduction = armorProtPercentage + totalEPF * (1.0 - armorProtPercentage);
+        final double damage = heldItemDamageLevel * (1.0 - armorReduction);
+        final double hitsToKill = getTotalHealth(target) / damage;
+        return round(hitsToKill, 1);
+    }
+
+    public static float n() {
+        return ae(mc.thePlayer.rotationYaw, mc.thePlayer.movementInput.moveForward, mc.thePlayer.movementInput.moveStrafe);
+    }
+
+    public static String extractFileName(String name) {
+        int firstIndex = name.indexOf("_");
+        int lastIndex = name.lastIndexOf("_");
+
+        if (firstIndex != -1 && lastIndex != -1 && lastIndex > firstIndex) {
+            return name.substring(firstIndex + 1, lastIndex);
+        } else {
+            return name;
+        }
+    }
+
+    public static int mergeAlpha(int color, int alpha) {
+        return (color & 0xFFFFFF) | alpha << 24;
+    }
+
+    public static int clamp(int n) {
+        if (n > 255) {
+            return 255;
+        }
+        if (n < 4) {
+            return 4;
+        }
+        return n;
+    }
+
+    public static boolean hasArrows(ItemStack stack) {
+        final boolean flag = mc.thePlayer.capabilities.isCreativeMode || EnchantmentHelper.getEnchantmentLevel(Enchantment.infinity.effectId, stack) > 0;
+        return flag || mc.thePlayer.inventory.hasItem(Items.arrow);
+    }
+
+    public static int darkenColor(int color, double percent) {
+        int alpha = (color >> 24) & 0xFF;
+        int red   = (color >> 16) & 0xFF;
+        int green = (color >> 8)  & 0xFF;
+        int blue  = color & 0xFF;
+
+        percent = (100 - percent) / 100;
+
+        red   = (int)(red * percent);
+        green = (int)(green * percent);
+        blue  = (int)(blue * percent);
+
+        red   = clamp(red);
+        green = clamp(green);
+        blue  = clamp(blue);
+
+        int darkenedColor = (alpha << 24) | (red << 16) | (green << 8) | blue;
+        return darkenedColor;
+    }
+
+    public static boolean isTeammate(Entity entity) {
+        try {
+            Entity teamMate = entity;
+            if (mc.thePlayer.isOnSameTeam((EntityLivingBase) entity) || mc.thePlayer.getDisplayName().getUnformattedText().startsWith(teamMate.getDisplayName().getUnformattedText().substring(0, 2)) || getNetworkDisplayName().startsWith(teamMate.getDisplayName().getUnformattedText().substring(0, 2))) {
+                return true;
+            }
+        }
+        catch (Exception ignored) {}
+        return false;
+    }
+
+    public static String getNetworkDisplayName() {
+        try {
+            NetworkPlayerInfo playerInfo = mc.getNetHandler().getPlayerInfo(mc.thePlayer.getUniqueID());
+            return ScorePlayerTeam.formatPlayerName(playerInfo.getPlayerTeam(), playerInfo.getGameProfile().getName());
+        }
+        catch (Exception ignored) {}
+        return "";
+    }
+
+    public static void setSpeed(double n) {
+        if (n == 0.0) {
+            mc.thePlayer.motionZ = 0.0;
+            mc.thePlayer.motionX = 0.0;
+            return;
+        }
+        float n3 = n();
+        mc.thePlayer.motionX = -Math.sin(n3) * n;
+        mc.thePlayer.motionZ = Math.cos(n3) * n;
+    }
+
+    public static void resetTimer() {
+        ((IAccessorMinecraft) mc).getTimer().timerSpeed = 1.0F;
+    }
+
+    public static void beginLocalPlayerSubUpdate() {
+        LOCAL_PLAYER_SUB_UPDATE_DEPTH.set(LOCAL_PLAYER_SUB_UPDATE_DEPTH.get() + 1);
+    }
+
+    public static void endLocalPlayerSubUpdate() {
+        int depth = LOCAL_PLAYER_SUB_UPDATE_DEPTH.get() - 1;
+        LOCAL_PLAYER_SUB_UPDATE_DEPTH.set(Math.max(0, depth));
+    }
+
+    public static boolean isLocalPlayerSubUpdate() {
+        return LOCAL_PLAYER_SUB_UPDATE_DEPTH.get() > 0;
+    }
+
+    public static boolean inInventory() {
+        if (!nullCheck()) {
+            return false;
+        }
+        return (mc.currentScreen != null) && (mc.thePlayer.inventoryContainer != null) && (mc.thePlayer.inventoryContainer instanceof ContainerPlayer) && (mc.currentScreen instanceof GuiInventory);
+    }
+
+    public static int getSkyWarsStatus() {
+        List<String> sidebar = getSidebarLines();
+        if (sidebar.isEmpty()) {
+            return -1;
+        }
+        if (stripColor(sidebar.get(0)).startsWith("SKYWARS")) {
+            for (String line : sidebar) {
+                line = stripColor(line);
+                if (line.equals("Waiting...") || line.startsWith("Starting in ")) {
+                    return 1;
+                }
+                else if (line.startsWith("Players left: ")) {
+                    return 2;
+                }
+            }
+            return 0;
+        }
+        return -1;
+    }
+
+    public static String getString(final JsonObject type, final String member) {
+        try {
+            return type.get(member).getAsString();
+        }
+        catch (Exception er) {
+            return "";
+        }
+    }
+
+    public static int getBedwarsStatus() {
+        if (!nullCheck()) {
+            return -1;
+        }
+        final Scoreboard scoreboard = mc.theWorld.getScoreboard();
+        if (scoreboard == null) {
+            return -1;
+        }
+        final ScoreObjective objective = scoreboard.getObjectiveInDisplaySlot(1);
+        if (objective == null || !stripString(objective.getDisplayName()).contains("BED WARS")) {
+            return -1;
+        }
+        for (String line : getSidebarLines()) {
+            line = stripString(line);
+            String[] parts = line.split("  ");
+            if (parts.length > 1) {
+                if (parts[1].startsWith("L")) {
+                    return 0;
+                }
+            }
+            else if (line.equals("Waiting...") || line.startsWith("Starting in")) {
+                return 1;
+            }
+            else if (line.startsWith("R Red:") || line.startsWith("B Blue:")) {
+                return 2;
+            }
+        }
+        return -1;
+    }
+
+    public static String stripString(final String s) {
+        final char[] nonValidatedString = StringUtils.stripControlCodes(s).toCharArray();
+        final StringBuilder validated = new StringBuilder();
+        for (final char c : nonValidatedString) {
+            if (c < '' && c > '') {
+                validated.append(c);
+            }
+        }
+        return validated.toString();
+    }
+
+    public static List<String> getSidebarLines() {
+        final List<String> lines = new ArrayList<>();
+        if (mc.theWorld == null) {
+            return lines;
+        }
+        final Scoreboard scoreboard = mc.theWorld.getScoreboard();
+        if (scoreboard == null) {
+            return lines;
+        }
+        final ScoreObjective objective = scoreboard.getObjectiveInDisplaySlot(1);
+        if (objective == null) {
+            return lines;
+        }
+        Collection<Score> scores = scoreboard.getSortedScores(objective);
+        final List<Score> list = new ArrayList<>();
+        for (final Score input : scores) {
+            if (input != null && input.getPlayerName() != null && !input.getPlayerName().startsWith("#")) {
+                list.add(input);
+            }
+        }
+        if (list.size() > 15) {
+            scores = new ArrayList<>(Lists.newArrayList(Iterables.skip(list, list.size() - 15)));
+        } else {
+            scores = list;
+        }
+        int index = 0;
+        for (final Score score : scores) {
+            ++index;
+            final ScorePlayerTeam team = scoreboard.getPlayersTeam(score.getPlayerName());
+            lines.add(ScorePlayerTeam.formatPlayerName(team, score.getPlayerName()));
+            if (index == scores.size()) {
+                lines.add(objective.getDisplayName());
+            }
+        }
+        Collections.reverse(lines);
+        return lines;
+    }
+
+    public static Random getRandom() {
+        return rand;
+    }
+
+    public static boolean isMoving() {
+        return mc.thePlayer.moveForward != 0.0F || mc.thePlayer.moveStrafing != 0.0F;
+    }
+
+    public static void aim(Entity en, float offset, boolean sendPacket) {
+        if (en != null) {
+            float[] t = getRotationsOld(en);
+            if (t != null) {
+                float y = t[0];
+                float p = t[1] + 4.0F + offset;
+                if (sendPacket) {
+                    mc.getNetHandler().addToSendQueue(new C05PacketPlayerLook(y, p, mc.thePlayer.onGround));
+                }
+                else {
+                    mc.thePlayer.rotationYaw = y;
+                    mc.thePlayer.rotationPitch = p;
+                }
+            }
+
+        }
+    }
+
+    public static float[] getRotationsOld(Entity q) {
+        if (q == null) {
+            return null;
+        }
+        else {
+            double diffX = q.posX - mc.thePlayer.posX;
+            double diffY;
+            if (q instanceof EntityLivingBase) {
+                EntityLivingBase en = (EntityLivingBase) q;
+                diffY = en.posY + (double) en.getEyeHeight() * 0.9D - (mc.thePlayer.posY + (double) mc.thePlayer.getEyeHeight());
+            } else {
+                diffY = (q.getEntityBoundingBox().minY + q.getEntityBoundingBox().maxY) / 2.0D - (mc.thePlayer.posY + (double) mc.thePlayer.getEyeHeight());
+            }
+
+            double diffZ = q.posZ - mc.thePlayer.posZ;
+            double dist = MathHelper.sqrt_double(diffX * diffX + diffZ * diffZ);
+            float yaw = (float) (Math.atan2(diffZ, diffX) * 180.0D / 3.141592653589793D) - 90.0F;
+            float pitch = (float) (-(Math.atan2(diffY, dist) * 180.0D / 3.141592653589793D));
+            return new float[] { mc.thePlayer.rotationYaw + MathHelper.wrapAngleTo180_float(yaw - mc.thePlayer.rotationYaw) , mc.thePlayer.rotationPitch + MathHelper.wrapAngleTo180_float(pitch - mc.thePlayer.rotationPitch)};
+        }
+    }
+
+    public static double aimDifference(Entity en, boolean useServerYaw) {
+        return ((double) ((useServerYaw ? RotationUtils.serverRotations[0] : mc.thePlayer.rotationYaw) - getYaw(en)) % 360.0D + 540.0D) % 360.0D - 180.0D;
+    }
+
+    public static double pitchDifference(Entity en, boolean useServerPitch) {
+        return ((double) ((useServerPitch ? RotationUtils.serverRotations[1] : mc.thePlayer.rotationPitch) - getPitch(en)) % 360.0D + 540.0D) % 360.0D - 180.0D;
+    }
+
+    public static float getYaw(Entity ent) {
+        double x = ent.posX - mc.thePlayer.posX;
+        double z = ent.posZ - mc.thePlayer.posZ;
+        double yaw = Math.atan2(x, z) * 57.29577951308232;
+        return (float) (yaw * -1.0D);
+    }
+
+    public static float getPitch(Entity ent) {
+        double x = ent.posX - mc.thePlayer.posX;
+        double z = ent.posZ - mc.thePlayer.posZ;
+        double y = ent.posY + ent.getEyeHeight() / 2.0F - (mc.thePlayer.posY + mc.thePlayer.getEyeHeight());
+        double pitch = Math.atan2(y, Math.sqrt(x * x + z * z)) * 57.29577951308232;
+        return (float) (pitch * -1.0D);
+    }
+
+    public static void switchSlot(final int slot, final boolean instant) {
+        mc.thePlayer.inventory.currentItem = slot;
+        if (instant) {
+            ((IAccessorPlayerControllerMP) mc.playerController).callSyncCurrentPlayItem();
+        }
+    }
+
+    public static MovingObjectPosition getTarget(final double reach, final float yaw, final float pitch) {
+        Vec3 eyeVec = mc.thePlayer.getPositionEyes(1.0f);
+        float y = -yaw * 0.017453292f;
+        float p = -pitch * 0.017453292f;
+        float f = MathHelper.cos(y - 3.1415927f);
+        float f2 = MathHelper.sin(y - 3.1415927f);
+        float f3 = -MathHelper.cos(p);
+        float f4 = MathHelper.sin(p);
+        Vec3 lookVec = new Vec3(f2 * f3, f4, f * f3);
+        Vec3 sumVec = eyeVec.addVector(lookVec.xCoord * reach, lookVec.yCoord * reach, lookVec.zCoord * reach);
+        return mc.theWorld.rayTraceBlocks(eyeVec, sumVec, false, false, false);
+    }
+
+    public static boolean isPossibleToReach(BlockPos pos, double reach) {
+        final float[] rot = RotationUtils.getRotations(pos);
+        final Vec3 eyeVec = mc.thePlayer.getPositionEyes(1.0f);
+        final float y = -rot[0] * 0.017453292f;
+        final float p = -rot[1] * 0.017453292f;
+        final float f = MathHelper.cos(y - 3.1415927f);
+        final float f2 = MathHelper.sin(y - 3.1415927f);
+        final float f3 = -MathHelper.cos(p);
+        final float f4 = MathHelper.sin(p);
+        final Vec3 lookVec = new Vec3(f2 * f3, f4, f * f3);
+        final Vec3 sumVec = eyeVec.addVector(lookVec.xCoord * reach, lookVec.yCoord * reach, lookVec.zCoord * reach);
+        final AxisAlignedBB axis = BlockUtils.getBlock(pos).getCollisionBoundingBox(mc.theWorld, pos, BlockUtils.getBlockState(pos));
+        if (axis == null) {
+            return false;
+        }
+        final MovingObjectPosition mop = axis.calculateIntercept(eyeVec, sumVec);
+        return mop != null;
+    }
+
+    public static void setSpeed(double val, boolean checkMoving) {
+        if (!checkMoving || isMoving()) {
+            mc.thePlayer.motionX = -Math.sin(gd()) * val;
+            mc.thePlayer.motionZ = Math.cos(gd()) * val;
+        }
+    }
+
+    public static boolean keysDown() {
+        return Keyboard.isKeyDown(mc.gameSettings.keyBindForward.getKeyCode()) || Keyboard.isKeyDown(mc.gameSettings.keyBindBack.getKeyCode()) || Keyboard.isKeyDown(mc.gameSettings.keyBindLeft.getKeyCode()) || Keyboard.isKeyDown(mc.gameSettings.keyBindRight.getKeyCode());
+    }
+
+    public static boolean jumpDown() {
+        return Keyboard.isKeyDown(mc.gameSettings.keyBindJump.getKeyCode());
+    }
+
+    public static double distanceToGround(Entity entity) {
+        if (entity.onGround) {
+            return 0;
+        }
+        double fallDistance = -1;
+        double y = entity.posY;
+        if (entity.posY % 1 == 0) {
+            y--;
+        }
+        for (int i = (int) Math.floor(y); i > -1; i--) {
+            if (!isPlaceable(new BlockPos(entity.posX, i, entity.posZ))) {
+                fallDistance = y - i;
+                break;
+            }
+        }
+        return fallDistance - 1;
+    }
+
+    public static float gd() {
+        float yw = mc.thePlayer.rotationYaw;
+        if (mc.thePlayer.moveForward < 0.0F) {
+            yw += 180.0F;
+        }
+
+        float f;
+        if (mc.thePlayer.moveForward < 0.0F) {
+            f = -0.5F;
+        } else if (mc.thePlayer.moveForward > 0.0F) {
+            f = 0.5F;
+        } else {
+            f = 1.0F;
+        }
+
+        if (mc.thePlayer.moveStrafing > 0.0F) {
+            yw -= 90.0F * f;
+        }
+
+        if (mc.thePlayer.moveStrafing < 0.0F) {
+            yw += 90.0F * f;
+        }
+
+        yw *= 0.017453292F;
+        return yw;
+    }
+
+    public static float ae(float n, float n2, float n3) {
+        float n4 = 1.0f;
+        if (n2 < 0.0f) {
+            n += 180.0f;
+            n4 = -0.5f;
+        } else if (n2 > 0.0f) {
+            n4 = 0.5f;
+        }
+        if (n3 > 0.0f) {
+            n -= 90.0f * n4;
+        } else if (n3 < 0.0f) {
+            n += 90.0f * n4;
+        }
+        return n * 0.017453292f;
+    }
+
+    public static double getHorizontalSpeed() {
+        return getHorizontalSpeed(mc.thePlayer);
+    }
+
+    public static double getHorizontalSpeed(Entity entity) {
+        return Math.sqrt(entity.motionX * entity.motionX + entity.motionZ * entity.motionZ);
+    }
+
+    public static List<String> getTopLevelLines(String fileContents) {
+        List<String> topLevelLines = new ArrayList<>();
+        String[] lines = fileContents.split("\\r?\\n");
+        int braceLevel = 0;
+        boolean inBlockComment = false;
+
+        for (String line : lines) {
+            String originalLine = line;
+            String processedLine = line.trim();
+
+            if (inBlockComment) {
+                if (processedLine.contains("*/")) {
+                    inBlockComment = false;
+                    processedLine = processedLine.substring(processedLine.indexOf("*/") + 2).trim();
+                }
+                else {
+                    continue;
+                }
+            }
+
+            if (processedLine.startsWith("//")) {
+                continue;
+            }
+
+            if (processedLine.contains("/*")) {
+                inBlockComment = true;
+                processedLine = processedLine.substring(0, processedLine.indexOf("/*")).trim();
+                if (processedLine.isEmpty()) {
+                    continue;
+                }
+            }
+
+            if (processedLine.contains("//")) {
+                processedLine = processedLine.substring(0, processedLine.indexOf("//")).trim();
+            }
+
+            if (processedLine.contains("/*") && processedLine.contains("*/")) {
+                processedLine = processedLine.substring(0, processedLine.indexOf("/*")) + processedLine.substring(processedLine.indexOf("*/") + 2);
+                processedLine = processedLine.trim();
+            }
+
+            if (processedLine.isEmpty()) {
+                continue;
+            }
+
+            String lineWithoutStrings = removeStringLiterals(processedLine);
+
+            int openBraces = 0;
+            int closeBraces = 0;
+            for (char ch : lineWithoutStrings.toCharArray()) {
+                if (ch == '{') {
+                    openBraces++;
+                }
+                else if (ch == '}') {
+                    closeBraces++;
+                }
+            }
+            braceLevel += openBraces - closeBraces;
+
+            if (braceLevel == 0 && !processedLine.contains("{") && !processedLine.contains("}") && !processedLine.startsWith("@")) {
+                topLevelLines.add(originalLine.trim());
+            }
+        }
+
+        return topLevelLines;
+    }
+
+    public static boolean holdingEdible(ItemStack stack) {
+        if (stack.getItem() instanceof ItemFood && mc.thePlayer.getFoodStats().getFoodLevel() == 20) {
+            ItemFood food = (ItemFood) stack.getItem();
+            return ((IAccessorItemFood) food).getAlwaysEdible();
+        }
+        return true;
+    }
+
+    private static String removeStringLiterals(String line) {
+        StringBuilder sb = new StringBuilder();
+        boolean inString = false;
+
+        for (int i = 0; i < line.length(); i++) {
+            char ch = line.charAt(i);
+            if (ch == '\"' && (i == 0 || line.charAt(i - 1) != '\\')) {
+                inString = !inString;
+                continue;
+            }
+            if (!inString) {
+                sb.append(ch);
+            }
+        }
+
+        return sb.toString();
+    }
+
+    public static boolean blockAbove() {
+        return !(BlockUtils.getBlock(new BlockPos(mc.thePlayer.posX, mc.thePlayer.posY + 2, mc.thePlayer.posZ)) instanceof BlockAir);
+    }
+
+    public static boolean onEdge() {
+        return onEdge(mc.thePlayer);
+    }
+
+    public static boolean onEdge(Entity entity) {
+        return mc.theWorld.getCollidingBoundingBoxes(entity, entity.getEntityBoundingBox().offset(entity.motionX / 3.0D, -1.0D, entity.motionZ / 3.0D)).isEmpty();
+    }
+
+    public static boolean lookingAtBlock() {
+        return mc.objectMouseOver != null && mc.objectMouseOver.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK && mc.objectMouseOver.getBlockPos() != null;
+    }
+
+    public static boolean isDiagonal(boolean strict) {
+        float yaw = ((mc.thePlayer.rotationYaw % 360) + 360) % 360;
+        yaw = yaw > 180 ? yaw - 360 : yaw;
+        boolean isYawDiagonal = inBetween(-170, 170, yaw) && !inBetween(-10, 10, yaw) && !inBetween(80, 100, yaw) && !inBetween(-100, -80, yaw);
+       if (strict) {
+           isYawDiagonal = inBetween(-178.5, 178.5, yaw) && !inBetween(-1.5, 1.5, yaw) && !inBetween(88.5, 91.5, yaw) && !inBetween(-91.5, -88.5, yaw);
+       }
+        boolean isStrafing = Keyboard.isKeyDown(mc.gameSettings.keyBindLeft.getKeyCode()) || Keyboard.isKeyDown(mc.gameSettings.keyBindRight.getKeyCode());
+        return isYawDiagonal || isStrafing;
+    }
+
+    public static double gbps(Entity en, int d) {
+        double x = en.posX - en.prevPosX;
+        double z = en.posZ - en.prevPosZ;
+        double sp = Math.sqrt(x * x + z * z) * 20.0D;
+        if (d == 0) {
+            return sp;
+        }
+        return round(sp, d);
+    }
+
+    public static boolean inBetween(double min, double max, double value) {
+        return value >= min && value <= max;
+    }
+
+    public static String removeFormatCodes(String str) {
+        return str.replace("§k", "").replace("§l", "").replace("§m", "").replace("§n", "").replace("§o", "").replace("§r", "");
+    }
+
+    public static boolean isClicking() {
+        if (ModuleManager.autoClicker != null && ModuleManager.autoClicker.isEnabled()) {
+            return Mouse.isButtonDown(0);
+        }
+        else {
+            return MouseHelper.f() > 1 && System.currentTimeMillis() - MouseHelper.LL < 300L;
+        }
+    }
+
+    /**
+     * Returns true if the player is mining (attack key down, ray hits block, no entity in front).
+     * Uses raw input for attack key (ignores AutoClicker's KeyBinding state).
+     */
+    public static boolean isMining() {
+        int keyCode = mc.gameSettings.keyBindAttack.getKeyCode();
+        if (keyCode == 0) return false;
+        boolean attackDown = keyCode < 0 ? Mouse.isButtonDown(keyCode + 100) : Keyboard.isKeyDown(keyCode);
+        if (!attackDown) return false;
+        double reach = mc.playerController.getBlockReachDistance();
+        float yaw = mc.thePlayer.rotationYaw;
+        float pitch = mc.thePlayer.rotationPitch;
+        MovingObjectPosition entityHit = RotationUtils.rayTrace(reach, 1.0f, new float[] { yaw, pitch }, null);
+        if (entityHit != null && entityHit.typeOfHit == MovingObjectPosition.MovingObjectType.ENTITY) {
+            return false;
+        }
+        MovingObjectPosition blockHit = RotationUtils.rayCastBlock(reach, yaw, pitch);
+        return blockHit != null && blockHit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK && blockHit.getBlockPos() != null;
+    }
+
+    public static boolean isEdgeOfBlock() {
+        BlockPos pos = new BlockPos(mc.thePlayer.posX, mc.thePlayer.posY - ((mc.thePlayer.posY % 1.0 == 0.0) ? 1 : 0), mc.thePlayer.posZ);
+        return mc.theWorld.isAirBlock(pos);
+    }
+
+    public static long timeBetween(long val, long val2) {
+        return Math.abs(val2 - val);
+    }
+
+    public static void sendModuleMessage(Module module, String s) {
+        sendRawMessage("&3" + module.getName() + "&7: &r" + s);
+    }
+
+    public static EntityLivingBase raytrace(int range) {
+        Entity entity = null;
+        EntityPlayer self = (Freecam.freeEntity == null) ? mc.thePlayer : Freecam.freeEntity;
+        MovingObjectPosition rayTrace = self.rayTrace(range, 1.0f);
+        final Vec3 getPositionEyes = self.getPositionEyes(1.0f);
+        final float rotationYaw = self.rotationYaw;
+        final float rotationPitch = self.rotationPitch;
+        final float cos = MathHelper.cos(-rotationYaw * 0.017453292f - 3.1415927f);
+        final float sin = MathHelper.sin(-rotationYaw * 0.017453292f - 3.1415927f);
+        final float n2 = -MathHelper.cos(-rotationPitch * 0.017453292f);
+        final Vec3 vec3 = new Vec3((double)(sin * n2), (double)MathHelper.sin(-rotationPitch * 0.017453292f), cos * n2);
+        final Vec3 addVector = getPositionEyes.addVector(vec3.xCoord * (double)range, vec3.yCoord * (double)range, vec3.zCoord * (double)range);
+        Vec3 vec4 = null;
+        final List getEntitiesWithinAABBExcludingEntity = mc.theWorld.getEntitiesWithinAABBExcludingEntity(mc.getRenderViewEntity(), mc.getRenderViewEntity().getEntityBoundingBox().addCoord(vec3.xCoord * (double)range, vec3.yCoord * (double)range, vec3.zCoord * (double)range).expand(1.0, 1.0, 1.0));
+        double n3 = (double)range;
+        for (int i = 0; i < getEntitiesWithinAABBExcludingEntity.size(); ++i) {
+            final Entity entity2 = (Entity)getEntitiesWithinAABBExcludingEntity.get(i);
+            if (entity2.canBeCollidedWith()) {
+                final float getCollisionBorderSize = entity2.getCollisionBorderSize();
+                final AxisAlignedBB expand = entity2.getEntityBoundingBox().expand((double)getCollisionBorderSize, (double)getCollisionBorderSize, (double)getCollisionBorderSize);
+                final MovingObjectPosition calculateIntercept = expand.calculateIntercept(getPositionEyes, addVector);
+                if (expand.isVecInside(getPositionEyes)) {
+                    if (0.0 < n3 || n3 == 0.0) {
+                        entity = entity2;
+                        vec4 = ((calculateIntercept == null) ? getPositionEyes : calculateIntercept.hitVec);
+                        n3 = 0.0;
+                    }
+                }
+                else if (calculateIntercept != null) {
+                    final double distanceTo = getPositionEyes.distanceTo(calculateIntercept.hitVec);
+                    if (distanceTo < n3 || n3 == 0.0) {
+                        if (entity2 == mc.getRenderViewEntity().ridingEntity && !entity2.canRiderInteract()) {
+                            if (n3 == 0.0) {
+                                entity = entity2;
+                                vec4 = calculateIntercept.hitVec;
+                            }
+                        }
+                        else {
+                            entity = entity2;
+                            vec4 = calculateIntercept.hitVec;
+                            n3 = distanceTo;
+                        }
+                    }
+                }
+            }
+        }
+        if (entity != null && (n3 < range || rayTrace == null)) {
+            rayTrace = new MovingObjectPosition(entity, vec4);
+        }
+        if (rayTrace != null && rayTrace.typeOfHit == MovingObjectPosition.MovingObjectType.ENTITY && rayTrace.entityHit instanceof EntityLivingBase) {
+            return (EntityLivingBase)rayTrace.entityHit;
+        }
+        return null;
+    }
+
+    public static int getChroma(long speed, long... delay) {
+        long time = System.currentTimeMillis() + (delay.length > 0 ? delay[0] : 0L);
+        return Color.getHSBColor((float) (time % (15000L / speed)) / (15000.0F / (float) speed), 1.0F, 1.0F).getRGB();
+    }
+
+    public static double round(double val, int decimalPlaces) {
+        if (decimalPlaces == 0) {
+            return (double) Math.round(val);
+        }
+        else {
+            double p = Math.pow(10.0D, decimalPlaces);
+            return (double) Math.round(val * p) / p;
+        }
+    }
+
+    public static String stripColor(String string) {
+        if (string.isEmpty()) {
+            return string;
+        }
+        final char[] array = StringUtils.stripControlCodes(string).toCharArray();
+        final StringBuilder sb = new StringBuilder();
+        for (final char c : array) {
+            if (c < '\u007f' && c > '\u0014') {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    public static List<String> getScoreBoardOld() {
+        List<String> lines = new ArrayList();
+        if (mc.theWorld == null) {
+            return lines;
+        } else {
+            Scoreboard scoreboard = mc.theWorld.getScoreboard();
+            if (scoreboard == null) {
+                return lines;
+            } else {
+                ScoreObjective objective = scoreboard.getObjectiveInDisplaySlot(1);
+                if (objective == null) {
+                    return lines;
+                } else {
+                    Collection<Score> scores = scoreboard.getSortedScores(objective);
+                    List<Score> list = new ArrayList();
+                    Iterator var5 = scores.iterator();
+
+                    Score score;
+                    while (var5.hasNext()) {
+                        score = (Score) var5.next();
+                        if (score != null && score.getPlayerName() != null && !score.getPlayerName().startsWith("#")) {
+                            list.add(score);
+                        }
+                    }
+
+                    if (list.size() > 15) {
+                        scores = Lists.newArrayList(Iterables.skip(list, scores.size() - 15));
+                    } else {
+                        scores = list;
+                    }
+
+                    var5 = scores.iterator();
+
+                    while (var5.hasNext()) {
+                        score = (Score) var5.next();
+                        ScorePlayerTeam team = scoreboard.getPlayersTeam(score.getPlayerName());
+                        lines.add(ScorePlayerTeam.formatPlayerName(team, score.getPlayerName()));
+                    }
+
+                    return lines;
+                }
+            }
+        }
+    }
+
+    public static void setSwinging() {
+        int armSwingEnd = mc.thePlayer.isPotionActive(Potion.digSpeed) ? 6 - (1 + mc.thePlayer.getActivePotionEffect(Potion.digSpeed).getAmplifier()) : (mc.thePlayer.isPotionActive(Potion.digSlowdown) ? 6 + (1 + mc.thePlayer.getActivePotionEffect(Potion.digSlowdown).getAmplifier()) * 2 : 6);
+        if (!mc.thePlayer.isSwingInProgress || mc.thePlayer.swingProgressInt >= armSwingEnd / 2 || mc.thePlayer.swingProgressInt < 0) {
+            mc.thePlayer.swingProgressInt = -1;
+            mc.thePlayer.isSwingInProgress = true;
+        }
+
+    }
+
+    public static String uppercaseFirst(String s) {
+        return s.substring(0, 1).toUpperCase() + s.substring(1);
+    }
+
+    public static boolean isPlaceable(BlockPos blockPos) {
+        return BlockUtils.replaceable(blockPos) || BlockUtils.isFluid(BlockUtils.getBlock(blockPos));
+    }
+
+    public static boolean spectatorCheck() {
+        return mc.thePlayer.inventory.getStackInSlot(8) != null && mc.thePlayer.inventory.getStackInSlot(8).getDisplayName().contains("Return") || stripString(((IAccessorGuiIngame) mc.ingameGUI).getDisplayedTitle()).contains("YOU DIED");
+    }
+
+    public static boolean holdingWeapon() {
+        return holdingWeapon(mc.thePlayer);
+    }
+
+    public static boolean holdingWeapon(EntityLivingBase entityLivingBase) {
+        if (entityLivingBase.getHeldItem() == null) {
+            return false;
+        }
+        Item getItem = entityLivingBase.getHeldItem().getItem();
+        return getItem instanceof ItemSword || (Settings.weaponAxe.isToggled() && getItem instanceof ItemAxe) || (Settings.weaponRod.isToggled() && getItem instanceof ItemFishingRod) || (Settings.weaponStick.isToggled() && getItem == Items.stick) || (Settings.weaponHoe.isToggled() && getItem instanceof ItemHoe) || (Settings.weaponShovel.isToggled() && getItem instanceof ItemSpade);
+    }
+
+    public static boolean holdingSword() {
+        if (mc.thePlayer.getHeldItem() == null) {
+            return false;
+        }
+        return mc.thePlayer.getHeldItem().getItem() instanceof ItemSword;
+    }
+
+    public static double getDamageLevel(ItemStack itemStack) {
+        return ItemSortScoring.getMeleeDamage(itemStack);
+    }
+
+    public static float getDirection() {
+        return getCustomDirection(mc.thePlayer.rotationYaw, mc.thePlayer.movementInput.moveForward, mc.thePlayer.movementInput.moveStrafe);
+    }
+
+    public static boolean isUserMoving() {
+        return mc.thePlayer.movementInput.moveForward != 0.0f || mc.thePlayer.movementInput.moveStrafe != 0.0f;
+    }
+
+    public static float getCustomDirection(float yaw, final float moveForward, final float moveStrafe) {
+        float forward = 1.0f;
+        if (moveForward < 0.0f) {
+            yaw += 180.0f;
+            forward = -0.5f;
+        }
+        else if (moveForward > 0.0f) {
+            forward = 0.5f;
+        }
+        if (moveStrafe > 0.0f) {
+            yaw -= 90.0f * forward;
+        }
+        else if (moveStrafe < 0.0f) {
+            yaw += 90.0f * forward;
+        }
+        return yaw * 0.017453292f;
+    }
+
+    public static boolean canBePlaced(ItemBlock itemBlock) {
+        Block block = itemBlock.getBlock();
+        if (block == null) {
+            return false;
+        }
+        if (BlockUtils.isInteractable(block) || block instanceof BlockSnow || block instanceof BlockWeb || block instanceof BlockSapling || block instanceof BlockDaylightDetector || block instanceof BlockBeacon || block instanceof BlockBanner || block instanceof BlockEndPortalFrame || block instanceof BlockEndPortal || block instanceof BlockLever || block instanceof BlockButton || block instanceof BlockSkull || block instanceof BlockLiquid || block instanceof BlockCactus || block instanceof BlockDoublePlant || block instanceof BlockLilyPad || block instanceof BlockCarpet || block instanceof BlockTripWire || block instanceof BlockTripWireHook || block instanceof BlockTallGrass || block instanceof BlockFlower || block instanceof BlockFlowerPot || block instanceof BlockSign || block instanceof BlockLadder || block instanceof BlockTorch || block instanceof BlockRedstoneTorch || block instanceof BlockStairs || block instanceof BlockSlab || block instanceof BlockFence || block instanceof BlockPane || block instanceof BlockStainedGlassPane || block instanceof BlockGravel || block instanceof BlockClay || block instanceof BlockSand || block instanceof BlockSoulSand || block instanceof BlockRailBase) {
+            return false;
+        }
+        return true;
+    }
+
+    public static <E extends Enum<E>> E getEnum(Class<E> enumClass, String value) {
+        for (E enumConstant : enumClass.getEnumConstants()) {
+            if (enumConstant.name().equals(value)) {
+                return enumConstant;
+            }
+        }
+        return null;
+    }
+
+    public static int getSpeedAmplifier() {
+        if (mc.thePlayer.isPotionActive(Potion.moveSpeed)) {
+            return 1 + mc.thePlayer.getActivePotionEffect(Potion.moveSpeed).getAmplifier();
+        }
+        return 0;
+    }
+
+    public static ItemStack getSpoofedItem(ItemStack original) {
+        if (ModuleManager.autoTool != null && ModuleManager.autoTool.isEnabled() && ModuleManager.autoTool.spoofItem.isToggled() && mc.thePlayer != null) {
+            return mc.thePlayer.inventory.getStackInSlot(ModuleManager.autoTool.previousSlot == -1 ? mc.thePlayer.inventory.currentItem : ModuleManager.autoTool.previousSlot);
+        }
+        return original;
+    }
+
+    public static boolean scaffoldDiagonal(boolean strict) {
+        return false;
+    }
+
+    public static String readInputStream(InputStream inputStream) {
+        StringBuilder stringBuilder = new StringBuilder();
+
+        try {
+            BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(inputStream));
+            String line;
+            while ((line = bufferedReader.readLine()) != null)
+                stringBuilder.append(line).append('\n');
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return stringBuilder.toString();
+    }
+
+    public static boolean isLobby() {
+        if (isHypixel()) {
+            List<String> sidebarLines = getSidebarLines();
+            if (!sidebarLines.isEmpty()) {
+                String[] parts = stripColor(sidebarLines.get(1)).split("  ");
+                if (parts.length > 1 && parts[1].charAt(0) == 'L') {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static boolean isBedwarsPracticeOrReplay() {
+        if (isHypixel()) {
+            if (!nullCheck()) {
+                return false;
+            }
+            final Scoreboard scoreboard = mc.theWorld.getScoreboard();
+            if (scoreboard == null) {
+                return false;
+            }
+            final ScoreObjective objective = scoreboard.getObjectiveInDisplaySlot(1);
+            if (objective == null) {
+                return false;
+            }
+            String stripped = stripString(objective.getDisplayName());
+            if (stripped.contains("BED WARS PRACTICE") || stripped.contains("REPLAY")) {
+                return true;
+            }
+            return false;
+        }
+        return false;
+    }
+
+    public static Vec3 getClosestPlayerPos(double maxDistSq) {
+        if (mc.theWorld == null || mc.thePlayer == null) return null;
+        Vec3 closest = null;
+        double bestDist = maxDistSq;
+        for (EntityPlayer player : mc.theWorld.playerEntities) {
+            if (player == mc.thePlayer) continue;
+            if (mc.getNetHandler() == null || mc.getNetHandler().getPlayerInfo(player.getUniqueID()) == null)
+                continue;
+            double dx = player.posX - mc.thePlayer.posX;
+            double dy = player.posY - mc.thePlayer.posY;
+            double dz = player.posZ - mc.thePlayer.posZ;
+            double dist = dx * dx + dy * dy + dz * dz;
+            if (dist < bestDist) {
+                bestDist = dist;
+                closest = new Vec3(player.posX, player.posY, player.posZ);
+            }
+        }
+        return closest;
+    }
+}
