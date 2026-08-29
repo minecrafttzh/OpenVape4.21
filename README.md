@@ -4,8 +4,17 @@
 
 Vape 4.21 的 Java 层与 Windows x64 原生桥接层研究性恢复工程，附带完整中文本地化。
 
-> GitHub 仓库：[RSSeeker/Vape-v4.21](https://github.com/RSSeeker/Vape-v4.21) ·
-> 发布页：[Releases](https://github.com/RSSeeker/Vape-v4.21/releases)
+> 基于原项目的修复与修改：
+  *修复注入器因权限问题无法注入的bug
+  *更简洁的注入器
+  *其他功能的添加
+>本项目新增功能:
+  *silentaim添加两个模式normal（normal模式添加random aim范围随机瞄准）/ai（基于liquidbounce模型算法）  
+  *autotool添加notduringcombat/notduringuse
+  *rightclicker添加sneakonly
+  *notification添加augustus piano toggle sound
+> 基于原GitHub 仓库：[RSSeeker/Vape-v4.21](https://github.com/RSSeeker/Vape-v4.21) 的更新与修复·
+> 原项目发布页：[Releases](https://github.com/RSSeeker/Vape-v4.21/releases)
 >
 > 源代码来源：[OpenVapeCN/OpenVape](https://github.com/OpenVapeCN/OpenVape)
 > （本项目基于该公开仓库的源代码进行恢复、整理与本地化）。
@@ -20,7 +29,7 @@ Vape 4.21 的 Java 层与 Windows x64 原生桥接层研究性恢复工程，附
 
 **使用方式**：
 
-- 双击运行 → GUI 界面（窗口标题「Vape v4」），直接选择 Minecraft 进程注入，无需登录
+- 双击运行 → GUI 界面（窗口标题「Vape v4」），自动选择 Minecraft 进程注入，无需登录
 - 命令行注入器：`Vape-v4.21.28.exe -nogui [pid]` —— 不带 pid 弹出进程选择器，带 pid 直接注入
 - 注入完成后游戏中按 右Shift（默认）打开功能界面
 
@@ -28,7 +37,7 @@ Vape 4.21 的 Java 层与 Windows x64 原生桥接层研究性恢复工程，附
 
 **GUI 加载器（v4.21.9+）**
 
-- 集成上游 VapeLoader 图形界面（GDI+ 自绘，全中文）：进程选择 / 注入进度 / 加载完成
+- 集成上游 VapeLoader 图形界面（GDI+ 自绘，全中文）：进程选择（如果有多个minecraft进程） / 注入进度 / 加载完成自动退出
 - 去掉登录页与缓存询问页：启动即选进程注入，本地生成 token
 - **支持加载外部 DLL**：exe 旁存在 `Vape-v4.21Native.dll` 时优先注入外部 DLL；否则从 exe 内嵌资源解压注入，两种模式均免附带文件
 - 窗口标题「Vape v4」，图标与产品一致
