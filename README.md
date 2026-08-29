@@ -5,14 +5,17 @@
 Vape 4.21 的 Java 层与 Windows x64 原生桥接层研究性恢复工程，附带完整中文本地化。
 
 基于原项目的修复与修改：
-  修复注入器因权限问题无法注入的bug
-  更简洁的注入器
-  其他功能的添加
+
+修复注入器因权限问题无法注入的bug
+  
+更简洁的注入器
+
 本项目新增功能:
-  silentaim添加两个模式normal（normal模式添加random aim范围随机瞄准）/ai（基于liquidbounce模型算法）  
-  autotool添加notduringcombat/notduringuse
-  rightclicker添加sneakonly
-  notification添加augustus piano toggle sound
+silentaim添加两个模式normal（normal模式添加random aim范围随机瞄准）/ai（基于liquidbounce模型算法）  
+autotool添加notduringcombat/notduringuse
+rightclicker添加sneakonly
+notification添加augustus piano toggle sound
+
 > 基于原GitHub 仓库：[RSSeeker/Vape-v4.21](https://github.com/RSSeeker/Vape-v4.21) 的更新与修复·
 > 原项目发布页：[Releases](https://github.com/RSSeeker/Vape-v4.21/releases)
 >
